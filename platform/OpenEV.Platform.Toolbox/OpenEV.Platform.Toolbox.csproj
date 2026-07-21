@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Cross-platform: the draw closures rasterize into managed Rgba8Image via
+         OpenEV.Platform.Imaging's software Canvas; no MonoGame / Windows dependency. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>OpenEV.Platform.Toolbox</RootNamespace>
+    <AssemblyName>OpenEV.Platform.Toolbox</AssemblyName>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Managed software renderer (Canvas/RgbaColor/RectI/Rgba8Image/SoftwareFont):
+         the draw closures rasterize into Rgba8Image instead of a SpriteBatch. -->
+    <ProjectReference Include="..\OpenEV.Platform.Imaging\OpenEV.Platform.Imaging.csproj" />
+  </ItemGroup>
+</Project>

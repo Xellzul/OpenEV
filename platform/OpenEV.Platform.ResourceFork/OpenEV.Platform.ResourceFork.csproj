@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>OpenEV.Platform.ResourceFork</RootNamespace>
+    <AssemblyName>OpenEV.Platform.ResourceFork</AssemblyName>
+    <!-- CA2255: ModuleInit.cs uses [ModuleInitializer] intentionally (encoding
+         provider registration). -->
+    <NoWarn>$(NoWarn);CA2255</NoWarn>
+  </PropertyGroup>
+
+  <!-- CodePagesEncodingProvider (code page 10000, Mac Roman — OSType display via
+       ForkResource.TypeCode) ships in the .NET 10 shared framework, so no
+       System.Text.Encoding.CodePages PackageReference is needed (it would warn
+       NU1510 as a redundant framework-provided package). -->
+</Project>

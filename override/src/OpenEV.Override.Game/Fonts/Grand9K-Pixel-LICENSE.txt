@@ -1,0 +1,25 @@
+Grand9K Pixel
+=============
+
+Author:  Jayvee Enaguas (HarvettFox96)
+License: Creative Commons Attribution-ShareAlike 3.0 (CC BY-SA 3.0)
+         https://creativecommons.org/licenses/by-sa/3.0/
+Source:  https://www.dafont.com/grand9k-pixel.font
+
+This folder ships two forms of the font, both FREE and redistributable:
+
+  * "Grand9K Pixel.ttf" — the unmodified Grand9K Pixel TrueType outline (from the
+    dafont source above). The Register port loads it as the scalable outline base
+    so EVERY text size renders through a free font (no proprietary system face),
+    and so it needs no Verdana/Arial/Tahoma.
+  * "Grand9K-9.bdf" — a 9-pixel Mac Roman bitmap strike rasterized from those same
+    outlines (rendered at the font's native pixel grid, one design pixel = one
+    screen pixel). It renders the pane crisp at classic Mac "Geneva 9"'s native
+    size — sharper than the outline base at that size.
+
+Geneva itself is an Apple system font and is NOT bundled: when a real Geneva
+strike (or geneva.ttf) is present locally it is preferred over both of the above;
+otherwise Grand9K renders the panes.
+
+The unmodified TrueType and the rasterized strike (a derivative work) both remain
+under CC BY-SA 3.0. Attribution to Jayvee Enaguas is required when redistributing.

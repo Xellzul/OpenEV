@@ -1,0 +1,9 @@
+root = true
+
+# OpenEV.Override.Ports — enforce .NET default C# style (4-space, Allman braces)
+# plus file-scoped namespaces so `dotnet format` converts the remaining
+# block-scoped declarations.
+[*.cs]
+indent_style = space
+indent_size = 4
+csharp_style_namespace_declarations = file_scoped:warning

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\OpenEV.Platform.ResourceFork\OpenEV.Platform.ResourceFork.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- Settings inlined from the former src/Directory.Build.props (src/ removed 2026-06-04). -->
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <RootNamespace>OpenEV.Platform.EvoData</RootNamespace>
+    <AssemblyName>OpenEV.Platform.EvoData</AssemblyName>
+    <!-- CA2255: ModuleInit.cs uses [ModuleInitializer] intentionally (one-time
+         encoding/registration setup). Build-flag suppression only; no logic change. -->
+    <NoWarn>$(NoWarn);CS8618;CS8625;CS0219;CS0414;CS0168;CA2255</NoWarn>
+  </PropertyGroup>
+</Project>

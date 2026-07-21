@@ -1,0 +1,12 @@
+# Normalize line endings: store LF in repo, checkout native (CRLF on Windows, LF on Unix)
+* text=auto
+
+# Windows batch files must be CRLF everywhere — the release bundle is assembled on
+# a Linux CI runner, and cmd.exe can mis-parse goto/labels in an LF-only .cmd.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Shell scripts must be LF everywhere — a CRLF in the shebang line makes macOS/Unix
+# fail with "bad interpreter: /bin/bash^M". The macOS .command unpack script is one.
+*.command text eol=lf
+*.sh      text eol=lf

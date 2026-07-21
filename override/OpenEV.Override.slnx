@@ -1,0 +1,15 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="../platform/OpenEV.Platform.EvoData/OpenEV.Platform.EvoData.csproj" />
+    <Project Path="../platform/OpenEV.Platform.Imaging/OpenEV.Platform.Imaging.csproj" />
+    <Project Path="../platform/OpenEV.Platform.Toolbox/OpenEV.Platform.Toolbox.csproj" />
+    <Project Path="src/OpenEV.Override.Game/OpenEV.Override.Game.csproj" />
+    <Project Path="src/OpenEV.Override.Ports/OpenEV.Override.Ports.csproj" />
+  </Folder>
+  <Project Path="../platform/OpenEV.Platform.ResourceFork/OpenEV.Platform.ResourceFork.csproj" />
+</Solution>

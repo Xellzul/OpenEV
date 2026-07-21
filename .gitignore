@@ -1,0 +1,65 @@
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Dd]ebug/
+[Rr]elease/
+[Xx]64/
+[Xx]86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+
+# .NET artifacts
+*.dll
+*.exe
+*.pdb
+*.cache
+*.ilk
+*.lib
+*.exp
+*.iobj
+*.ipdb
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# MonoGame
+Content/bin/
+Content/obj/
+
+# Python tooling cache (tools/*.py)
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# Verification scratch (screenshots, PICT dumps, ad-hoc captures)
+title_*.png
+pict*.bmp
+pict*.png
+
+# OS / editor cruft
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Local Claude Code harness state (not project code)
+.claude/
