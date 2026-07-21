@@ -97,3 +97,38 @@ jobs:
           name: OpenEV-${{ matrix.rid }}
           path: publish/OpenEV-${{ matrix.rid }}
           if-no-files-found: error
+
+  release:
+    name: Attach binaries to release
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: OpenEV-*
+
+      # zip for Windows; tar.gz elsewhere, because upload-artifact drops the unix
+      # executable bit and tar lets us restore it before packing.
+      - name: Pack
+        shell: bash
+        run: |
+          mkdir -p out
+          for dir in dist/OpenEV-*; do
+            name=$(basename "$dir")
+            if [[ "$name" == *win-x64 ]]; then
+              (cd "$dir" && zip -qr "../../out/$name.zip" .)
+            else
+              chmod +x "$dir/OpenEV.Override" "$dir/tools/OpenEV.Extraction.SitExtract"
+              tar -czf "out/$name.tar.gz" -C "$dir" .
+            fi
+          done
+          ls -lh out
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          fail_on_unmatched_files: true
