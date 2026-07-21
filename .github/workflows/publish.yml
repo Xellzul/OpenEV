@@ -63,6 +63,17 @@ jobs:
             --runtime ${{ matrix.rid }} \
             --output publish/OpenEV-${{ matrix.rid }}
 
+      # The unpacker that turns .sit archives of the original game into the
+      # data-fork + .rsrc sidecar layout the game reads. Goes in a "tools"
+      # subfolder so its single-file bundle can't collide with the game's.
+      - name: Publish SitExtract
+        shell: bash
+        run: |
+          dotnet publish tools/OpenEV.Extraction.SitExtract/OpenEV.Extraction.SitExtract.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.rid }} \
+            --output "publish/OpenEV-${{ matrix.rid }}/tools"
+
       # The game resolves its data from "EV Override" alongside the binary
       # (Program.ResolveGameDir). Ship the folder empty but present, with a note
       # explaining what belongs in it.
