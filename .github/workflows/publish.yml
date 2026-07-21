@@ -1,0 +1,88 @@
+name: Publish
+
+# Builds OpenEV.Override as a self-contained single-file binary for each supported
+# RID. Each publish lands in a flat folder containing the executable plus an empty
+# "EV Override" folder, which is where the user drops their own game data files
+# (the repo ships no game assets).
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  # Pin the package folder so the cache path is identical on all three runner OSes.
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+jobs:
+  publish:
+    name: ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+          - rid: linux-x64
+            os: ubuntu-latest
+          - rid: osx-x64
+            os: macos-latest
+          - rid: osx-arm64
+            os: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # No packages.lock.json in the repo, so key on the project files instead —
+      # they are what determines the restore graph. restore-keys lets an unrelated
+      # csproj edit still reuse the previous cache instead of downloading from zero.
+      - name: Cache NuGet packages
+        uses: actions/cache@v5.1.0
+        with:
+          path: ${{ github.workspace }}/.nuget/packages
+          key: nuget-${{ matrix.rid }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ matrix.rid }}-
+
+      - name: Publish
+        shell: bash
+        run: |
+          dotnet publish override/src/OpenEV.Override.Game/OpenEV.Override.Game.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.rid }} \
+            --output publish/OpenEV-${{ matrix.rid }}
+
+      # The game resolves its data from "EV Override" alongside the binary
+      # (Program.ResolveGameDir). Ship the folder empty but present, with a note
+      # explaining what belongs in it.
+      - name: Stage EV Override data folder
+        shell: bash
+        run: |
+          dir="publish/OpenEV-${{ matrix.rid }}/EV Override"
+          mkdir -p "$dir"
+          cat > "$dir/PUT GAME FILES HERE.txt" <<'EOF'
+          Put your EV Override game files here.
+
+          OpenEV ships no game assets. Copy the contents of your own "EV Override"
+          folder (the data and plug-in files from a legitimate copy of the game)
+          into this folder, next to the OpenEV.Override executable.
+
+          The game will start without them, but will report the data as not found.
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenEV-${{ matrix.rid }}
+          path: publish/OpenEV-${{ matrix.rid }}
+          if-no-files-found: error
