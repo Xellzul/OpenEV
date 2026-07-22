@@ -45,15 +45,18 @@ public static class SpawnPers
                     if (systemShort == link) eligible[i] = 1;
                     if (link > 127 && link < 10000 && systemShort == link - 128) eligible[i] = 1;
                     if (link > 9998 && link < 15000 && link - 10000 == sys.Govt) eligible[i] = 1;
+                    // AtOrPastTable: plug-in përs data can push these band indexes past the
+                    // 128-entry govt table; the original reads heap garbage there without
+                    // crashing (see GovtTable).
                     if (link > 14999 && link < 20000 && sys.Govt > -1)
                     {
-                        if (sys.Govt == GameData.Governments[link - 15000].Ally) eligible[i] = 1;
+                        if (sys.Govt == GovtTable.AtOrPastTable(link - 15000).Ally) eligible[i] = 1;
                         if (link - 15000 == GameData.Governments[sys.Govt].Ally) eligible[i] = 1;
                     }
                     if (link > 19999 && link < 25000 && sys.Govt > -1 && link - 20000 != sys.Govt) eligible[i] = 1;
                     if (link > 24999 && link < 30000 && sys.Govt > -1)
                     {
-                        if (sys.Govt == GameData.Governments[link - 25000].Enemy) eligible[i] = 1;
+                        if (sys.Govt == GovtTable.AtOrPastTable(link - 25000).Enemy) eligible[i] = 1;
                         if (link - 25000 == GameData.Governments[sys.Govt].Enemy) eligible[i] = 1;
                     }
                     // Suppress pers under a start-disabled/derelict government, when the

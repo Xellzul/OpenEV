@@ -19,6 +19,15 @@ public static class QuickDrawBitmapDecoder
         bool isPixMap = (rowBytesRaw & 0x8000) != 0;
         short rowBytes = (short)(rowBytesRaw & 0x7FFF);
 
+        if (!isPixMap && opcode != 0x009A && opcode != 0x009B)
+        {
+            DecodeDiagnostics.Log(tag, $"op=0x{opcode:X4} {width}x{height} rowBytes={rowBytes} old-style BitMap");
+            reader.Seek(reader.Position - 2);
+            var bitmapImage = new Rgba8Image(width, height);
+            ClassicPictV1Decoder.DecodeBitMapInto(ref reader, bitmapImage, (byte)opcode, tag);
+            return bitmapImage;
+        }
+
         if (reader.Remaining < 42) { Log(tag, $"0x{opcode:X4}: PixMap header truncated"); return null; }
 
         reader.Skip(8);

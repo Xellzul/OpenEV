@@ -7,9 +7,9 @@ using OpenEV.Platform.ResourceFork;
 
 namespace OpenEV.Platform.EvoData;
 
-// Loads the seven canonical EVO resource files from a game directory. Reads the
-// resource fork via the unpacked '.rsrc/' sidecar (the Mac fork) first, falling
-// back to the file's data fork. Plug-in merging (EVO Plug-Ins) is M7 work.
+// Loads the seven canonical EVO resource files from a game directory, then merges
+// EV Plug-Ins/ on top. Reads the resource fork via the unpacked '.rsrc/' sidecar
+// (the Mac fork) first, falling back to the file's data fork.
 public static class OverrideDataLoader
 {
     /// Where ExtractSfnts writes fonts pulled out of the game data. The host sets
@@ -77,9 +77,9 @@ public static class OverrideDataLoader
             if (LoadAndMerge(data, sourceDir, fileName, log, OverrideLayerKind.DataFile, prov) is not null)
                 data.OpenedDataFiles.Add(fileName);
 
-        // Plug-in support — the original game scans EV Plug-Ins/ for resource forks
-        // and merges them on top of the canonical files. Resources sharing the same
-        // (type, id) get OVERWRITTEN by the plug-in's version. New IDs are added.
+        // Plug-in support — the original game (FUN_1006189c) scans EV Plug-Ins/ and opens
+        // the resource fork of every file whose FINDER TYPE is 'Opïf' (0x4F709566), merging
+        // each on top of the canonical files: same (type, id) is OVERWRITTEN, new IDs added.
         // The 'Sample Plugin' bundled with EVO 1.0.2 is loaded here.
         string pluginsDir = Path.Combine(sourceDir, "EV Plug-Ins");
         string pluginsRsrcDir = Path.Combine(pluginsDir, ".rsrc");
@@ -93,6 +93,12 @@ public static class OverrideDataLoader
             foreach (string file in pluginFiles)
             {
                 if (file.EndsWith("Icon\r") || file.EndsWith("Icon%0D")) continue;
+                // Honor the original's Finder-type gate via the .finf sidecar — plug-in
+                // folders routinely also hold QuickTime movies, music, and icon files the
+                // game must NOT merge (their stray PICTs clobber real resources). A file
+                // with no sidecar has no Finder type at all (plain Windows copy), so it
+                // is accepted.
+                if (!HasPluginFinderType(pluginsDir, Path.GetFileName(file))) continue;
                 try
                 {
                     byte[] bytes = File.ReadAllBytes(file);
@@ -260,6 +266,23 @@ public static class OverrideDataLoader
         }
         catch { /* malformed STR# 130 → fall back to the canonical order */ }
         return null;
+    }
+
+    // The plug-in scan (FUN_1006189c) opens only files with Finder type 'Opïf'
+    // (0x4F709566, 0x95 = MacRoman ï) — FSpGetFInfo in the original, the first 4 bytes of
+    // the unpacked .finf/ sidecar here. No sidecar ⇒ no Finder type exists ⇒ accept.
+    private static bool HasPluginFinderType(string pluginsDir, string fileName)
+    {
+        string finf = Path.Combine(pluginsDir, ".finf", fileName);
+        if (!File.Exists(finf)) return true;
+        try
+        {
+            using var s = File.OpenRead(finf);
+            Span<byte> type = stackalloc byte[4];
+            return s.Read(type) == 4
+                && type[0] == 0x4F && type[1] == 0x70 && type[2] == 0x95 && type[3] == 0x66;
+        }
+        catch { return true; }
     }
 
     public static byte[]? LoadResourceFork(string sourceDir, string fileName)

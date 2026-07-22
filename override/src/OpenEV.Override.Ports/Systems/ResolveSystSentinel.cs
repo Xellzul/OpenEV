@@ -190,19 +190,19 @@ public static class ResolveSystSentinel
 
     // FUN_10049c5c 49F3C-49FF4 (loop) / 4A058-4A120 (retry) — "Ally" mutual-relation test:
     // true if wantedGovt is govt's Ally, or govt is wantedGovt's Ally.
+    // AtOrPastTable: wantedGovt comes from a resource sentinel band and can index past the
+    // 128-entry govt table; the original reads heap garbage there without crashing (see GovtTable).
     private static bool GovtIsMutualAlly(short govt, int wantedGovt) =>
         wantedGovt == GameData.Governments[govt].Ally ||
-        GameData.Governments[wantedGovt].Ally == govt;
+        GovtTable.AtOrPastTable(wantedGovt).Ally == govt;
 
     // FUN_10049c5c 4A28C-4A344 (loop) / 4A3A8-4A470 (retry) — "Enemy" mutual-relation test.
     // ORIGINAL BUG (kept, bug-for-bug parity): both lookups here use wantedGovt = code-15000,
     // not code-25000 (this branch's own base) — confirmed in EV Override-11.c 30763/30784 and
     // the ASM (`addi r7,r4,-0x3A98` at loc_4A28C, offset 0x3A98 = 15000). Callers pass
-    // code-15000 to preserve this.
-    // NOTE: a real 25000-30000 sentinel (code-15000 >= 10000) indexes GameData.Governments
-    // (128 entries) out of range; original read garbage past the table, port throws
-    // IndexOutOfRangeException (unpreservable — confirmed by direct test, not fixed here).
+    // code-15000 to preserve this. A real 25000-30000 sentinel therefore always lands
+    // wantedGovt (code-15000 >= 10000) past the table → AtOrPastTable's no-match stand-in.
     private static bool GovtIsMutualEnemy(short govt, int wantedGovt) =>
         wantedGovt == GameData.Governments[govt].Enemy ||
-        GameData.Governments[wantedGovt].Enemy == govt;
+        GovtTable.AtOrPastTable(wantedGovt).Enemy == govt;
 }

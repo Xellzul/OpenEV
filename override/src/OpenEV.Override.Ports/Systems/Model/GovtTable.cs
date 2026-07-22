@@ -18,6 +18,16 @@ public static class GovtTable
         for (int i = 0; i < s.Length; i++) s[i] = new GovtRecord();
         return s;
     }
+
+    // Plug-in data can aim the LinkSyst / syst-sentinel govt bands past the table (E3
+    // "The Frozen Heart" flët 130/132/140 carry LinkSyst 19968 → index 4968). The original
+    // does the `base + index*0x36` read unchecked and gets adjacent heap garbage — no crash,
+    // effectively a near-never relation match. That garbage is unpreservable in a managed
+    // array, so out-of-range indexes resolve to this never-matching stand-in instead
+    // (Ally/Enemy = -1 can equal no real govt index at the guarded call sites).
+    public static GovtRecord AtOrPastTable(int index) =>
+        (uint)index < (uint)Store.Length ? Store[index] : PastTableGarbage;
+    private static readonly GovtRecord PastTableGarbage = new() { Ally = -1, Enemy = -1 };
 }
 
 // One government definition (offsets = the old record layout; 'gövt' resource

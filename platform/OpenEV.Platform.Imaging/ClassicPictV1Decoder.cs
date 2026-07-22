@@ -68,7 +68,10 @@ public static class ClassicPictV1Decoder
 
     /// Decode one BitsRect / PackBitsRect opcode into `image` at its
     /// dstRect. Returns false on data error (the caller should bail).
-    private static bool DecodeBitMapInto(ref BigEndianSpanReader reader, Rgba8Image image, byte opcode, string? tag)
+    /// Internal: QuickDrawBitmapDecoder reuses this for old-style BitMaps
+    /// (rowBytes MSB clear) embedded in PICT v2 opcode streams — the record
+    /// layout is identical there.
+    internal static bool DecodeBitMapInto(ref BigEndianSpanReader reader, Rgba8Image image, byte opcode, string? tag)
     {
         if (reader.Remaining < 2) return false;
         short rowBytes = reader.ReadInt16();
