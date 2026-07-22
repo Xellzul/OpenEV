@@ -1080,27 +1080,12 @@ public static partial class MacToolbox
         port.SetPortRectPacked(0, (h << 16) | (w & 0xffff));
         return port.Handle;
     }
-    /// Window Manager CloseWindow — no-op.
-    public static void CloseWindow(int window) { /* no-op shim */ }
+    /// Window Manager CloseWindow — disposes a compositor-layer window record
+    /// (the QuickTime movie window); other handles (the render window) are no-ops.
+    public static void CloseWindow(int window) { if (_dialogs.ContainsKey(window)) DisposeDialog(window); }
     /// String Manager UpperString — no-op.
     public static void UpperString(int strPtr, int diacSensitive) { /* no-op shim */ }
-    // QuickTime Movie shims — EnterMovies reports unavailable (-1) so movie paths bail;
-    // IsMovieDone reports done. Everything else is a no-op.
-    public static short EnterMovies() => -1;
-    public static void ExitMovies() { /* no-op shim */ }
-    public static short OpenMovieFile(int fss, out short refNum, byte permission) { refNum = 0; return -1; }
-    public static void NewMovieFromFile(int[] movie, int refNum, out short resId,
-        int resName, int newActive, int active) { resId = 0; }
-    public static void CloseMovieFile(int refNum) { /* no-op shim */ }
-    public static void GetMovieBox(int movie, out short topOut) { topOut = 0; }
-    public static void SetMovieBox(int movie, int rectPtr) { /* no-op shim */ }
-    public static void SetMovieGWorld(int movie, int port, int device) { /* no-op shim */ }
-    public static void GoToBeginningOfMovie(int movie) { /* no-op shim */ }
-    public static void SetMovieRate(int movie, int rate) { /* no-op shim */ }
-    public static void StartMovie(int movie) { /* no-op shim */ }
-    public static bool IsMovieDone(int movie) => true;
-    public static void MoviesTask(int movie, int maxMillisecs) { /* no-op shim */ }
-    public static void DisposeMovie(int movie) { /* no-op shim */ }
+    // QuickTime Movie traps — real implementations in MacToolbox.Movies.cs.
 
     // List Manager
     /// Hit-test a local mouse point: a click in the scrollbar strip scrolls (line/page),
@@ -1200,12 +1185,6 @@ public static partial class MacToolbox
     public static int  SndDoCommand(int channel, int cmdPtr, bool noWait) => 0;
     public static int  SndDoImmediate(int channel, int cmdPtr) => 0;
     // DrawPicture(int, int) and CopyBits(int×6) — real impls live in MacToolbox.QuickDraw.cs.
-    public static void NewMovieFromFile(int moviePtr, int refNum, out short resId,
-                                         short newMovieActive, out byte dataRefWasChanged,
-                                         int dataRef, int dataRefType)
-    {
-        resId = 0; dataRefWasChanged = 0;
-    }
 
     // Inverse direction: a few int-taking stubs are invoked with managed byte[]
     // (un-collapsed `local_xxx` arrays). The byte[] overload is a no-op so the call compiles.

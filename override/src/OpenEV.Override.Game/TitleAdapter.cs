@@ -93,6 +93,22 @@ internal static class TitleAdapter
                 foreach (string name in _data.OpenedDataFiles) resRefByName[name] = nextResRef++;
                 MacToolbox.ResFileOpener = name => resRefByName.TryGetValue(name, out int r) ? r : -1;
 
+                // QuickTime movie files (PlayQuickTimeMovie / FUN_10060504): the original
+                // resolves the 'dëqt' record's file name in the EV Plug-Ins folder. Data
+                // fork only — the movies are flattened .mov files. Without a game dir the
+                // resolver stays null and EnterMovies keeps reporting -1 (a Mac without
+                // QuickTime), so movies degrade to their dësc-text fallback.
+                string movieDir = Path.Combine(gameDir, "EV Plug-Ins");
+                MacToolbox.MovieFileResolver = name =>
+                {
+                    try
+                    {
+                        string p = Path.Combine(movieDir, name);
+                        return File.Exists(p) ? File.ReadAllBytes(p) : null;
+                    }
+                    catch { return null; }
+                };
+
                 // Dialog Manager: serve DLOG/DITL templates to GetNewDialog from the parsed records.
                 // Window bounds + each item's DITL-local rect/kind/text/id pass through; GetNewDialog
                 // centres the window and offsets items to global coords. Unknown ids return null.
