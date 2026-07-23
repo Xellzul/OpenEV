@@ -60,14 +60,19 @@ public static partial class MacToolbox
         long lastCaretFlipMs = System.Environment.TickCount64;
 
         _trackingItemForTest = 0; _trackingInsideForTest = false;
-        RedrawDialog(rec, filter);   // draw once; persists in the screen RT
+        // Draw once; persists in the screen RT. A filter can CONSUME the redraw's
+        // updateEvt as an item fire instead of servicing it (see RedrawDialog) —
+        // the Mac ModalDialog returned that item, so propagate it here too.
+        short entryFired = RedrawDialog(rec, filter);
+        if (entryFired > 0) { itemHitOut = entryFired; return; }
 
         while (true)
         {
             if (UpdateEventsEnabled && _updateEvtPending)
             {
                 _updateEvtPending = false;
-                RedrawDialog(rec, filter, fill: false);
+                short fired = RedrawDialog(rec, filter, fill: false);
+                if (fired > 0) { itemHitOut = fired; return; }
             }
 
             // Poll-based key capture WITHOUT redrawing: send the filter a
@@ -85,7 +90,8 @@ public static partial class MacToolbox
                     // it. itemHit <= 0 = capture-only — the prefs keybind grid returns 1 with
                     // itemHit 0 to request a redraw of the just-captured binding.
                     if (nev.ItemHit > 0) { itemHitOut = nev.ItemHit; return; }
-                    RedrawDialog(rec, filter, fill: false);       // no bg fill → no flicker
+                    short fired = RedrawDialog(rec, filter, fill: false);   // no bg fill → no flicker
+                    if (fired > 0) { itemHitOut = fired; return; }
                 }
             }
 
@@ -327,8 +333,9 @@ public static partial class MacToolbox
     // static items over themselves, so filling white first just produces a
     // 1-frame white flash if the host's draw drain catches it before the grid
     // CopyBits (the "menu flickers when I change a keybind" report). Skip it.
-    private static void RedrawDialog(DlgRecord rec, Func<int, MacEvent, int>? filter, bool fill = true)
+    private static short RedrawDialog(DlgRecord rec, Func<int, MacEvent, int>? filter, bool fill = true)
     {
+        BeginDrawBatch();
         SetPort(rec.Handle);
         if (fill) FillDialogBackground(rec);
         // Draw the standard DITL items (buttons / static text / PICT / edit fields). Faithful
@@ -339,9 +346,18 @@ public static partial class MacToolbox
         // alerts) draws NOTHING on UpdateEvt, so without this unconditional DrawDialog its
         // buttons/PICT never painted and the window showed blank.
         DrawDialog(rec.Handle);
+        short firedItem = 0;
         if (filter is not null)
         {
-            filter(rec.Handle, MakeEvent((short)MacEventType.UpdateEvt));   // scene grid / custom art
+            var uev = MakeEvent((short)MacEventType.UpdateEvt);
+            if (filter(rec.Handle, uev) != 0 && uev.ItemHit > 0)   // scene grid / custom art
+            {
+                // Consumed as an idle fire, NOT serviced: the update region stays
+                // dirty (re-delivered next pass, when the just-reset mash counter /
+                // released key lets the filter's update branch run).
+                firedItem = uev.ItemHit;
+                NoteWindowInvalidated();
+            }
         }
         // Redraw any custom UserItem art (e.g. the Game Speed slider) on top of
         // the freshly-filled background so it isn't erased.
@@ -357,6 +373,8 @@ public static partial class MacToolbox
                 if (runs is not null) DrawStyledTextBox(t, r, runs);
                 else TETextBox(t, r, 0);
             }
+        EndDrawBatch();
+        return firedItem;
     }
 
     /// First ENABLED item under (x,y), searched top-of-list-last so later
