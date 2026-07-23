@@ -155,6 +155,8 @@ internal sealed unsafe class OverrideGameHost : IDisposable
         // the Start menu. Alt+Tab stays with the OS (SDL default); the grab releases with focus.
         _sdl.SetWindowKeyboardGrab(_window, SdlBool.True);
 
+        SetWindowIconFromFinderIcon();
+
         // Keep EVO's QuickDraw analogue in the managed software buffers, but let SDL use the GPU for
         // the final texture upload/scale/present when it can — forcing SDL's software renderer makes
         // large play-area resolutions crawl (the last full-frame scale runs on the CPU too). Fall back
@@ -560,6 +562,89 @@ internal sealed unsafe class OverrideGameHost : IDisposable
         _sdl.RenderPresent(_renderer);
 
         MacToolbox.FrameTextInput.Clear();
+    }
+
+    // Window/taskbar icon (host substrate — Mac windows had no icons; this is the icon the FINDER
+    // showed for the app on the desktop). Resolved exactly as the Finder did, from the app's own
+    // fork (never plug-in-shadowed): BNDL → the FREF with file type 'APPL' → its local icon id →
+    // the BNDL's ICN# map → icon family id; then icl8 (32×32 8-bit, canonical system CLUT) punched
+    // through the ICN# mask (its second 128 bytes). EVO 1.0.2 resolves to family 141, the Override
+    // crystal on the black diamond. Channels run through Gamma.Correct like every Mac color shown.
+    // Any missing piece just keeps the executable's default icon.
+    private void SetWindowIconFromFinderIcon()
+    {
+        const uint TypeBndl = 0x424E444C, TypeFref = 0x46524546, TypeIcnMask = 0x49434E23,   // 'BNDL' 'FREF' 'ICN#'
+                   TypeIcl8 = 0x69636C38, TypeAppl = 0x4150504C;                              // 'icl8' 'APPL'
+        byte[]? fork = OpenEV.Platform.EvoData.OverrideDataLoader.LoadResourceFork(_gameDir!, "EV Override");
+        if (fork is null) return;
+
+        byte[]? bndl = null;
+        var byTypeId = new Dictionary<(uint type, short id), byte[]>();
+        foreach (var res in OpenEV.Platform.ResourceFork.MacResourceFork.Read(fork))
+        {
+            byTypeId[(res.RawType, res.Id)] = res.Data;
+            if (res.RawType == TypeBndl) bndl ??= res.Data;
+        }
+        if (bndl is null || bndl.Length < 8) return;
+
+        static ushort Be16(byte[] d, int o) => (ushort)((d[o] << 8) | d[o + 1]);
+        static uint Be32(byte[] d, int o) => ((uint)d[o] << 24) | ((uint)d[o + 1] << 16) | ((uint)d[o + 2] << 8) | d[o + 3];
+
+        // BNDL: signature(4) versId(2) typeCount-1(2), then per type: OSType(4) count-1(2)
+        // [localId(2) resId(2)]×count. Collect the FREF and ICN# mapping arrays.
+        var frefIds = new List<short>();
+        var icnPairs = new List<(ushort local, short resId)>();
+        int typeCount = Be16(bndl, 6) + 1;
+        int p = 8;
+        for (int t = 0; t < typeCount && p + 6 <= bndl.Length; t++)
+        {
+            uint osType = Be32(bndl, p);
+            int n = Be16(bndl, p + 4) + 1;
+            for (int k = 0; k < n && p + 10 + k * 4 <= bndl.Length; k++)
+            {
+                if (osType == TypeFref) frefIds.Add((short)Be16(bndl, p + 8 + k * 4));
+                else if (osType == TypeIcnMask) icnPairs.Add((Be16(bndl, p + 6 + k * 4), (short)Be16(bndl, p + 8 + k * 4)));
+            }
+            p += 6 + n * 4;
+        }
+
+        short famId = -1;
+        foreach (short frefId in frefIds)
+        {
+            // FREF: fileType(4) localIconId(2) fileName(pstr).
+            if (byTypeId.TryGetValue((TypeFref, frefId), out var fref) && fref.Length >= 6 && Be32(fref, 0) == TypeAppl)
+            {
+                ushort localIcon = Be16(fref, 4);
+                foreach (var (local, resId) in icnPairs)
+                    if (local == localIcon) { famId = resId; break; }
+                break;
+            }
+        }
+        if (famId < 0 ||
+            !byTypeId.TryGetValue((TypeIcl8, famId), out var icl8) || icl8.Length < 1024 ||
+            !byTypeId.TryGetValue((TypeIcnMask, famId), out var icn) || icn.Length < 256)
+            return;
+
+        int clut = MacToolbox.GetCTable(8);
+        var rgba = new byte[32 * 32 * 4];
+        for (int i = 0; i < 32 * 32; i++)
+        {
+            MacToolbox.GetColorTableRGB(clut, icl8[i], out short r, out short g, out short b);
+            rgba[i * 4 + 0] = Gamma.Correct((byte)((ushort)r >> 8));
+            rgba[i * 4 + 1] = Gamma.Correct((byte)((ushort)g >> 8));
+            rgba[i * 4 + 2] = Gamma.Correct((byte)((ushort)b >> 8));
+            rgba[i * 4 + 3] = (byte)((icn[128 + (i >> 3)] & (0x80 >> (i & 7))) != 0 ? 255 : 0);
+        }
+        fixed (byte* px = rgba)
+        {
+            Surface* icon = _sdl.CreateRGBSurfaceWithFormatFrom(px, 32, 32, 32, 32 * 4, (uint)PixelFormatEnum.Abgr8888);
+            if (icon != null)
+            {
+                _sdl.SetWindowIcon(_window, icon);   // SDL copies the surface contents
+                _sdl.FreeSurface(icon);
+                Console.WriteLine($"[host] window icon set from app-fork Finder icon (family {famId}).");
+            }
+        }
     }
 
     private Vector2D<int> WindowToVirtual(int wx, int wy)
