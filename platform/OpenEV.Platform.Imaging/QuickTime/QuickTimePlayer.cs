@@ -15,6 +15,7 @@ public sealed class QuickTimePlayer
     public bool HasVideo => _schedule.Length > 0;
     public Rgba8Image? CurrentFrame { get; private set; }
     public IReadOnlyList<string> SkippedTracks => _movie.SkippedTracks;
+    public IReadOnlyList<QuickTimeMovieFile.QtAudioTrack> AudioTracks => _movie.AudioTracks;
 
     private readonly QuickTimeMovieFile _movie;
     private readonly byte[] _data;

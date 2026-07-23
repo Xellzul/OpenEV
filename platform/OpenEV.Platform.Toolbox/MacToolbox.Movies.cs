@@ -17,6 +17,15 @@ public static partial class MacToolbox
     /// records; the original resolves them in the EV Plug-Ins folder).
     public static Func<string, byte[]?>? MovieFileResolver;
 
+    /// Optional host audio hooks: decode a movie file's voice track to interleaved
+    /// s16 PCM (ffmpeg-backed where natives exist; null = stay silent), start it as
+    /// a mixer voice (returns an opaque token), stop that voice.
+    public static Func<byte[], MovieAudioTrack?>? MovieAudioDecoder;
+    public static Func<short[], int, int, object?>? MovieAudioPlayer;
+    public static Action<object?>? MovieAudioStopper;
+
+    public sealed record MovieAudioTrack(short[] Pcm, int Rate, int Channels, string FourCC);
+
     private sealed class MovieInstance
     {
         public QuickTimePlayer? Player;
@@ -25,6 +34,8 @@ public static partial class MacToolbox
         public int TargetPort;
         public long StartTick;
         public bool Started;
+        public MovieAudioTrack? Audio;
+        public object? AudioVoice;
     }
 
     private const int MovieHandleBase = 0x4D760000;   // 'Mv' band — only movie traps consume these
@@ -61,9 +72,13 @@ public static partial class MacToolbox
             Console.WriteLine($"[QT] '{fileName}': unparseable movie — skipped");
             return;
         }
-        string audio = player.SkippedTracks.Count > 0
-            ? $", audio not supported ({string.Join(", ", player.SkippedTracks)}) — silent"
-            : "";
+        if (player.HasVideo) inst.Audio = TryDecodeAudio(bytes);
+        var silent = new List<string>(player.SkippedTracks);
+        foreach (var t in player.AudioTracks)
+            if (inst.Audio is null || inst.Audio.FourCC != t.FourCC) silent.Add(t.FourCC);
+        string audio =
+            (inst.Audio is not null ? $", audio={inst.Audio.FourCC}" : "") +
+            (silent.Count > 0 ? $", silent tracks ({string.Join(", ", silent)})" : "");
         Console.WriteLine(player.HasVideo
             ? $"[QT] '{fileName}': video={player.VideoFourCC} {player.Width}x{player.Height}, " +
               $"{player.DurationMs / 1000.0:0.0}s{audio}"
@@ -98,11 +113,19 @@ public static partial class MacToolbox
 
     public static void SetMovieRate(int movie, int rateFixed) { }   // always played at 1.0
 
+    private static MovieAudioTrack? TryDecodeAudio(byte[] movieBytes)
+    {
+        try { return MovieAudioDecoder?.Invoke(movieBytes); }
+        catch (Exception ex) { Console.WriteLine($"[QT] audio decode failed: {ex.Message}"); return null; }
+    }
+
     public static void StartMovie(int movie)
     {
         if (!_movies.TryGetValue(movie, out var m)) return;
         m.StartTick = Environment.TickCount64;
         m.Started = true;
+        if (m.Audio is not null && m.AudioVoice is null)
+            m.AudioVoice = MovieAudioPlayer?.Invoke(m.Audio.Pcm, m.Audio.Rate, m.Audio.Channels);
     }
 
     public static bool IsMovieDone(int movie)
@@ -134,7 +157,12 @@ public static partial class MacToolbox
         }
     }
 
-    public static void DisposeMovie(int movie) => _movies.Remove(movie);
+    public static void DisposeMovie(int movie)
+    {
+        if (_movies.TryGetValue(movie, out var m) && m.AudioVoice is not null)
+            MovieAudioStopper?.Invoke(m.AudioVoice);
+        _movies.Remove(movie);
+    }
 
     /// The movie window: NewCWindow(0, &bounds, title, 0, plainDBox, 0, goAway, -1)
     /// in the original — here a bare window record on the dialog compositor stack

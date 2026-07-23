@@ -15,6 +15,7 @@ public sealed class QuickTimeMovieFile
 {
     public double DurationMs;
     public readonly List<QtVideoTrack> VideoTracks = new();
+    public readonly List<QtAudioTrack> AudioTracks = new();
     public readonly List<string> SkippedTracks = new();   // sample-desc fourccs of non-video tracks
 
     public sealed class QtVideoTrack
@@ -22,6 +23,19 @@ public sealed class QuickTimeMovieFile
         public string FourCC = "";
         public int Width, Height;
         public readonly List<QtVideoSample> Samples = new();
+    }
+
+    // A sound track's compressed packets + the codec parameters a decoder needs.
+    // Extradata is the sound-description 'wave' extension atom's content (or the raw
+    // description tail when there is no 'wave') — what QDMC-style decoders parse.
+    public sealed class QtAudioTrack
+    {
+        public string FourCC = "";
+        public int Channels = 1;
+        public int SampleRate;
+        public byte[] Extradata = Array.Empty<byte>();
+        public double OffsetMs;
+        public readonly List<QtVideoSample> Packets = new();   // same (Offset, Size, StartMs) shape
     }
 
     public sealed class QtVideoSample
@@ -82,6 +96,30 @@ public sealed class QuickTimeMovieFile
             if (stsd < 0) continue;
             string fourcc = U32(d, stsd + 8 + 4) > 0 ? FourCC(d, stsd + 8 + 8 + 4) : "";
 
+            // Edit list: leading empty edits (mediaTime == -1) delay the track start.
+            double trackOffsetMs = 0;
+            {
+                int edts0 = FindAtom(d, trak + 8, trakEnd, "edts");
+                int elst0 = edts0 >= 0 ? FindAtom(d, edts0 + 8, edts0 + AtomSize(d, edts0), "elst") : -1;
+                if (elst0 >= 0 && movieScale > 0)
+                {
+                    int n = (int)U32(d, elst0 + 8 + 4);
+                    for (int e = 0; e < n; e++)
+                    {
+                        uint dur = U32(d, elst0 + 8 + 8 + e * 12);
+                        int mediaTime = (int)U32(d, elst0 + 8 + 12 + e * 12);
+                        if (mediaTime != -1) break;
+                        trackOffsetMs += dur * 1000.0 / movieScale;
+                    }
+                }
+            }
+
+            if (subtype == "soun" && mediaScale > 0 && fourcc.Length > 0)
+            {
+                var at = ParseAudioTrack(d, stsd, stbl, stblEnd, mediaScale, trackOffsetMs, fourcc);
+                if (at is not null) { m.AudioTracks.Add(at); continue; }
+            }
+
             if (subtype != "vide" || mediaScale == 0)
             {
                 if (fourcc.Length > 0) m.SkippedTracks.Add(fourcc);
@@ -98,23 +136,7 @@ public sealed class QuickTimeMovieFile
                 Height = (short)U16(d, entry + 34),
             };
 
-            // Edit list: leading empty edits (mediaTime == -1) delay the track start.
-            double offsetMs = 0;
-            int edts = FindAtom(d, trak + 8, trakEnd, "edts");
-            int elst = edts >= 0 ? FindAtom(d, edts + 8, edts + AtomSize(d, edts), "elst") : -1;
-            if (elst >= 0 && movieScale > 0)
-            {
-                int n = (int)U32(d, elst + 8 + 4);
-                for (int e = 0; e < n; e++)
-                {
-                    uint dur = U32(d, elst + 8 + 8 + e * 12);
-                    int mediaTime = (int)U32(d, elst + 8 + 12 + e * 12);
-                    if (mediaTime != -1) break;
-                    offsetMs += dur * 1000.0 / movieScale;
-                }
-            }
-
-            if (ReadSampleTables(d, stbl, stblEnd, mediaScale, offsetMs, track))
+            if (ReadSampleTables(d, stbl, stblEnd, mediaScale, trackOffsetMs, track.Samples))
                 m.VideoTracks.Add(track);
         }
         if (m.DurationMs <= 0 && m.VideoTracks.Count == 0) return null;
@@ -146,8 +168,82 @@ public sealed class QuickTimeMovieFile
         catch { return null; }
     }
 
+    // Parse a sound track: codec params from the SoundDescription (v0/v1) + its
+    // 'wave' extension (decoder extradata), packets from the shared sample tables.
+    private static QtAudioTrack? ParseAudioTrack(byte[] d, int stsd, int stbl, int stblEnd,
+        uint mediaScale, double offsetMs, string fourcc)
+    {
+        int entry = stsd + 8 + 8;
+        int entrySize = (int)U32(d, entry);
+        if (entrySize < 36) return null;
+        var track = new QtAudioTrack
+        {
+            FourCC = fourcc,
+            OffsetMs = offsetMs,
+            Channels = Math.Max(1, U16(d, entry + 16 + 8)),
+            SampleRate = U16(d, entry + 16 + 16),           // 16.16 fixed → integer part
+        };
+        // v1 sound descriptions add 4 longs (samplesPerPacket / bytesPerPacket /
+        // bytesPerFrame / bytesPerSample) before the extension atoms.
+        int version = U16(d, entry + 16);
+        int samplesPerPacket = version >= 1 ? (int)U32(d, entry + 36) : 0;
+        int bytesPerFrame = version >= 1 ? (int)U32(d, entry + 44) : 0;
+        int ext = entry + (version >= 1 ? 52 : 36);
+        int entryEnd = entry + entrySize;
+        int wave = ext < entryEnd ? FindAtom(d, ext, entryEnd, "wave") : -1;
+        if (wave >= 0)
+        {
+            int len = AtomSize(d, wave) - 8;
+            if (len > 0 && wave + 8 + len <= d.Length)
+            {
+                track.Extradata = new byte[len];
+                Array.Copy(d, wave + 8, track.Extradata, 0, len);
+            }
+        }
+        else if (ext < entryEnd && entryEnd <= d.Length)
+        {
+            track.Extradata = new byte[entryEnd - ext];
+            Array.Copy(d, ext, track.Extradata, 0, entryEnd - ext);
+        }
+
+        // v1 compressed audio: the sample tables count PCM SAMPLES, not packets —
+        // stsz is uniform "1" and useless. Real framing: each chunk holds
+        // (stsc samples / samplesPerPacket) packets of bytesPerFrame bytes
+        // (verified against the E3 files: consecutive stco deltas match exactly).
+        if (version >= 1 && samplesPerPacket > 0 && bytesPerFrame > 0)
+        {
+            int stsc = FindAtom(d, stbl + 8, stblEnd, "stsc");
+            int stco = FindAtom(d, stbl + 8, stblEnd, "stco");
+            if (stsc < 0 || stco < 0) return null;
+            int stscN = (int)U32(d, stsc + 8 + 4);
+            int stcoN = (int)U32(d, stco + 8 + 4);
+            double rate = track.SampleRate > 0 ? track.SampleRate : 8000;
+            long pcmPos = 0;
+            for (int chunk = 1, e = 0; chunk <= stcoN; chunk++)
+            {
+                while (e + 1 < stscN && (int)U32(d, stsc + 8 + 8 + (e + 1) * 12) <= chunk) e++;
+                int chunkSamples = (int)U32(d, stsc + 8 + 12 + e * 12);
+                int packets = chunkSamples / samplesPerPacket;
+                int off = (int)U32(d, stco + 8 + 8 + (chunk - 1) * 4);
+                for (int k = 0; k < packets; k++)
+                {
+                    track.Packets.Add(new QtVideoSample
+                    {
+                        Offset = off + k * bytesPerFrame,
+                        Size = bytesPerFrame,
+                        StartMs = offsetMs + pcmPos * 1000.0 / rate,
+                    });
+                    pcmPos += samplesPerPacket;
+                }
+            }
+            return track.Packets.Count > 0 ? track : null;
+        }
+
+        return ReadSampleTables(d, stbl, stblEnd, mediaScale, offsetMs, track.Packets) ? track : null;
+    }
+
     private static bool ReadSampleTables(byte[] d, int stbl, int stblEnd, uint mediaScale,
-        double offsetMs, QtVideoTrack track)
+        double offsetMs, List<QtVideoSample> samples)
     {
         int stts = FindAtom(d, stbl + 8, stblEnd, "stts");
         int stsc = FindAtom(d, stbl + 8, stblEnd, "stsc");
@@ -184,7 +280,7 @@ public sealed class QuickTimeMovieFile
             int off = (int)U32(d, stco + 8 + 8 + (chunk - 1) * 4);
             for (int k = 0; k < perChunk && sample < sampleCount; k++, sample++)
             {
-                track.Samples.Add(new QtVideoSample
+                samples.Add(new QtVideoSample
                 {
                     Offset = off,
                     Size = sizes[sample],
@@ -193,7 +289,7 @@ public sealed class QuickTimeMovieFile
                 off += sizes[sample];
             }
         }
-        return track.Samples.Count > 0;
+        return samples.Count > 0;
     }
 
     private static int AtomSize(byte[] d, int off)

@@ -25,6 +25,13 @@
   <ItemGroup>
     <PackageReference Include="Silk.NET.SDL" Version="2.23.0" />
     <PackageReference Include="NativeFileDialogSharp" Version="0.5.0" />
+    <!-- FFmpeg (LGPL) for QuickTime movie VOICE audio (QCELP/QDMC — the plug-in
+         character speech; 'musi' QT-Music has no decoder anywhere and stays
+         silent). NuGet ships natives for windows-x64 only; on other platforms the
+         bindings pick up a system FFmpeg 7.x if installed, else MovieAudioFfmpeg
+         degrades to silent playback — the same fallback pattern as NFD above. -->
+    <PackageReference Include="Sdcb.FFmpeg" Version="7.0.0" />
+    <PackageReference Include="Sdcb.FFmpeg.runtime.windows-x64" Version="7.1.0" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Fonts\Grand9K-Pixel.ttf" />

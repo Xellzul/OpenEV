@@ -253,6 +253,22 @@ internal sealed unsafe class SoundEngine : IDisposable
         }
     }
 
+    // Raw interleaved-s16 one-shot (the QuickTime movie voice track). Returns an
+    // opaque token StopRawPcm accepts; null when the device is down.
+    public object? PlayRawPcm(short[] samples, int rate, int channels, float volume = 1f)
+    {
+        if (_dev == 0 || samples.Length == 0 || rate <= 0) return null;
+        var d = new Decoded { Samples = samples, Rate = rate, Channels = channels < 1 ? 1 : channels };
+        var v = MakeVoice(d, Math.Clamp(volume, 0f, 1f), loop: false);
+        lock (_lock) { _voices.Add(v); }
+        return v;
+    }
+
+    public void StopRawPcm(object? token)
+    {
+        if (token is Voice v) lock (_lock) { v.Active = false; }
+    }
+
     public void StartFileMusic(int sndId)
     {
         if (_dev == 0) return;

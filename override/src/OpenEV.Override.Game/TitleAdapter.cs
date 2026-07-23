@@ -144,6 +144,12 @@ internal static class TitleAdapter
                 MacToolbox.PairMusicStopper = ()        => _sound.StopPairMusic();
                 MacToolbox.SfxStopper       = id        => _sound.StopSfx(id);
                 MacToolbox.SfxStopAll       = ()        => _sound.StopAllSfx();
+                // QuickTime movie voice track: ffmpeg-backed decode (QCELP/QDMC — the
+                // plug-in character speech) into a raw mixer voice. Where the ffmpeg
+                // natives are missing the decoder returns null and movies stay silent.
+                MacToolbox.MovieAudioDecoder = MovieAudioFfmpeg.Decode;
+                MacToolbox.MovieAudioPlayer  = (pcm, rate, ch) => _sound.PlayRawPcm(pcm, rate, ch);
+                MacToolbox.MovieAudioStopper = token => _sound.StopRawPcm(token);
                 MacToolbox.MasterVolumeSetter = v       => _sound.MasterVolume = v;
                 Console.WriteLine($"[TitleAdapter] Sound bridge wired ({_data.Snds.Count} snds; title=30000 about=30001 click=600).");
 
